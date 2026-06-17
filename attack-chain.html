@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kill Chain Inspector — MITRE ATT&CK</title>
+<style>
+  :root{
+    --void:#0a0e14;
+    --panel:#11161f;
+    --line:#1e2733;
+    --ash:#5a6573;
+    --bone:#c4ccd6;
+    --signal:#ff5e3a;      /* attacker / threat */
+    --shield:#3ddc97;      /* mitigated */
+    --gold:#e8b339;        /* selected */
+    --mono:'SFMono-Regular',ui-monospace,'Cascadia Code','Roboto Mono',monospace;
+    --display:'Archivo Black','Helvetica Neue',Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--void);
+    color:var(--bone);
+    font-family:var(--mono);
+    font-size:14px;
+    line-height:1.5;
+    min-height:100vh;
+    background-image:
+      linear-gradient(rgba(30,39,51,.35) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(30,39,51,.35) 1px,transparent 1px);
+    background-size:48px 48px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* ---------- header ---------- */
+  header{border-bottom:1px solid var(--line);padding:34px 0 26px;position:relative}
+  .eyebrow{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--signal);margin-bottom:14px}
+  h1{
+    font-family:var(--display);font-weight:900;
+    font-size:clamp(34px,6vw,68px);line-height:.94;letter-spacing:-.02em;
+    text-transform:uppercase;color:#fff;
+  }
+  h1 .dim{color:var(--ash)}
+  .sub{margin-top:16px;color:var(--ash);max-width:560px;font-size:13px}
+  .scenario{
+    margin-top:22px;display:inline-flex;align-items:center;gap:10px;
+    border:1px solid var(--line);padding:8px 14px;font-size:12px;color:var(--bone);
+  }
+  .scenario b{color:var(--gold);font-weight:400}
+  .blink{width:7px;height:7px;border-radius:50%;background:var(--signal);
+    animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(255,94,58,.5)}
+    50%{opacity:.4;box-shadow:0 0 0 6px rgba(255,94,58,0)}}
+
+  /* ---------- controls ---------- */
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+    padding:18px 0;border-bottom:1px solid var(--line)}
+  .seg{display:flex;border:1px solid var(--line)}
+  .seg button{background:none;border:none;color:var(--ash);font-family:var(--mono);
+    font-size:12px;padding:8px 16px;cursor:pointer;transition:.15s;letter-spacing:.04em}
+  .seg button + button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--bone);color:var(--void)}
+  .seg button:hover:not(.on){color:var(--bone)}
+  .meter{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:12px}
+  .bar{width:160px;height:8px;background:var(--line);position:relative;overflow:hidden}
+  .bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--signal),var(--gold));
+    transition:width .5s cubic-bezier(.22,1,.36,1)}
+  .meter b{font-family:var(--display);font-size:15px;min-width:42px;text-align:right}
+
+  /* ---------- chain ---------- */
+  .chain{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;padding:30px 0 6px;position:relative}
+  .stage{
+    border:1px solid var(--line);background:var(--panel);
+    padding:14px 10px;cursor:pointer;position:relative;
+    transition:transform .18s,border-color .18s,background .18s;
+    min-height:118px;display:flex;flex-direction:column;
+  }
+  .stage:hover{transform:translateY(-4px);border-color:var(--ash)}
+  .stage.active{border-color:var(--gold);background:#15110a}
+  .stage .num{font-size:10px;color:var(--ash);letter-spacing:.1em}
+  .stage .tac{font-size:12px;font-weight:bold;margin-top:auto;line-height:1.25;color:var(--bone)}
+  .stage .cnt{font-size:10px;color:var(--signal);margin-top:6px}
+  .stage.clear .cnt{color:var(--shield)}
+  /* status dot */
+  .stage .dot{position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;
+    background:var(--signal);box-shadow:0 0 8px var(--signal)}
+  .stage.clear .dot{background:var(--shield);box-shadow:0 0 8px var(--shield)}
+  /* connector arrows */
+  .stage:not(:last-child)::after{
+    content:'';position:absolute;top:50%;right:-6px;width:6px;height:1px;
+    background:var(--line);z-index:2}
+  @media(max-width:820px){
+    .chain{grid-template-columns:repeat(2,1fr)}
+    .stage:not(:last-child)::after{display:none}
+  }
+
+  /* ---------- detail ---------- */
+  .detail{border:1px solid var(--line);border-top:none;background:var(--panel);
+    min-height:230px;padding:0}
+  .detail .head{display:flex;align-items:baseline;gap:14px;padding:18px 22px;
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .detail .head h2{font-family:var(--display);font-size:22px;text-transform:uppercase;color:#fff}
+  .detail .head .tid{font-size:11px;color:var(--gold);letter-spacing:.1em}
+  .detail .head p{font-size:12px;color:var(--ash);width:100%;margin-top:4px}
+  .techs{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  @media(max-width:680px){.techs{grid-template-columns:1fr}}
+  .tech{padding:16px 22px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);
+    display:flex;gap:14px;align-items:flex-start;transition:background .15s}
+  .tech:hover{background:#0d1219}
+  .tech .tcode{font-size:11px;color:var(--ash);min-width:62px;padding-top:2px}
+  .tech .tbody{flex:1}
+  .tech .tname{font-size:13px;color:var(--bone);font-weight:bold}
+  .tech .tdesc{font-size:12px;color:var(--ash);margin-top:3px}
+  .toggle{margin-top:9px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+    border:1px solid var(--line);background:none;color:var(--signal);
+    padding:5px 11px;cursor:pointer;text-transform:uppercase;transition:.15s}
+  .toggle:hover{border-color:var(--signal)}
+  .tech.mit .toggle{color:var(--shield);border-color:var(--shield);background:rgba(61,220,151,.06)}
+  .tech.mit .tname{color:var(--shield)}
+  .tech.mit .tname::before{content:'✓ ';}
+  .empty{padding:60px 22px;text-align:center;color:var(--ash);font-size:13px}
+  .empty b{display:block;color:var(--bone);font-family:var(--display);
+    font-size:18px;text-transform:uppercase;margin-bottom:8px;letter-spacing:.04em}
+
+  footer{padding:28px 0 44px;color:var(--ash);font-size:11px;letter-spacing:.04em;
+    border-top:1px solid var(--line);margin-top:34px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  footer a{color:var(--bone);text-decoration:none;border-bottom:1px solid var(--ash)}
+
+  :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Threat Intelligence · MITRE ATT&CK® Enterprise</div>
+    <h1>Kill Chain<br><span class="dim">Inspector</span></h1>
+    <p class="sub">Lần theo một chiến dịch tấn công có chủ đích qua bảy giai đoạn. Bấm vào từng kỹ thuật để vô hiệu hoá nó — và xem mức độ phơi nhiễm của hệ thống thay đổi theo thời gian thực.</p>
+    <div class="scenario">
+      <span class="blink"></span>
+      Kịch bản đang dựng lại: <b>Xâm nhập hệ thống thanh toán lõi</b>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="viewSeg">
+      <button class="on" data-view="all">Toàn chuỗi</button>
+      <button data-view="open">Chưa xử lý</button>
+    </div>
+    <button class="seg" id="resetBtn"><button style="border:none">↺ Đặt lại kịch bản</button></button>
+    <div class="meter">
+      <span>Mức phơi nhiễm</span>
+      <div class="bar"><i id="barFill" style="width:100%"></i></div>
+      <b id="barPct">100%</b>
+    </div>
+  </div>
+
+  <div class="chain" id="chain"></div>
+  <div class="detail" id="detail"></div>
+
+  <footer>
+    <span>Dữ liệu kỹ thuật ánh xạ theo khung MITRE ATT&CK Enterprise. Demo tương tác — không phải khuyến nghị bảo mật chính thức.</span>
+    <span>Built with <a href="#">Claude</a></span>
+  </footer>
+
+</div>
+
+<script>
+const STAGES = [
+  { id:'recon', tactic:'Reconnaissance', tid:'TA0043',
+    desc:'Kẻ tấn công thu thập thông tin trước khi hành động.',
+    techs:[
+      {code:'T1589',name:'Thu thập danh tính nhân viên',desc:'Quét LinkedIn, rò rỉ email để dựng danh sách mục tiêu phishing.'},
+      {code:'T1595',name:'Quét hạ tầng public',desc:'Dò cổng mở, subdomain, endpoint API lộ ra ngoài Internet.'},
+    ]},
+  { id:'access', tactic:'Initial Access', tid:'TA0001',
+    desc:'Bước chân đầu tiên vào trong mạng nội bộ.',
+    techs:[
+      {code:'T1566',name:'Spearphishing đính kèm',desc:'Email giả mạo phòng nhân sự kèm macro độc hại.'},
+      {code:'T1078',name:'Tài khoản hợp lệ bị lộ',desc:'Dùng credential mua trên chợ đen, không cần khai thác lỗ hổng.'},
+    ]},
+  { id:'exec', tactic:'Execution', tid:'TA0002',
+    desc:'Mã độc được chạy trên máy nạn nhân.',
+    techs:[
+      {code:'T1059',name:'PowerShell ẩn',desc:'Lệnh mã hoá base64 chạy nền, tải payload giai đoạn hai.'},
+      {code:'T1204',name:'Người dùng tự kích hoạt',desc:'Nạn nhân mở tệp đính kèm và bật nội dung.'},
+    ]},
+  { id:'persist', tactic:'Persistence', tid:'TA0003',
+    desc:'Duy trì chỗ đứng kể cả khi máy khởi động lại.',
+    techs:[
+      {code:'T1547',name:'Khởi động cùng hệ thống',desc:'Ghi registry Run key để mã độc tự chạy mỗi lần bật máy.'},
+      {code:'T1136',name:'Tạo tài khoản ẩn',desc:'Dựng tài khoản local quyền admin làm cửa sau dự phòng.'},
+    ]},
+  { id:'privesc', tactic:'Privilege Escalation', tid:'TA0004',
+    desc:'Nâng quyền từ người dùng thường lên quản trị.',
+    techs:[
+      {code:'T1068',name:'Khai thác lỗ hổng kernel',desc:'CVE chưa vá để leo thang lên quyền SYSTEM.'},
+      {code:'T1134',name:'Mạo danh token',desc:'Đánh cắp access token của tiến trình quyền cao.'},
+    ]},
+  { id:'lateral', tactic:'Lateral Movement', tid:'TA0008',
+    desc:'Di chuyển ngang tới máy chủ thanh toán lõi.',
+    techs:[
+      {code:'T1021',name:'RDP / SMB nội bộ',desc:'Dùng credential thu được để nhảy sang server tài chính.'},
+      {code:'T1550',name:'Pass-the-Hash',desc:'Tái sử dụng hash NTLM mà không cần mật khẩu gốc.'},
+    ]},
+  { id:'exfil', tactic:'Exfiltration', tid:'TA0010',
+    desc:'Rút dữ liệu giao dịch ra ngoài.',
+    techs:[
+      {code:'T1041',name:'Tuồn qua kênh C2',desc:'Mã hoá rồi gửi dữ liệu qua chính kênh điều khiển.'},
+      {code:'T1567',name:'Đẩy lên dịch vụ web',desc:'Ngụy trang dữ liệu rút ra dưới dạng traffic cloud hợp lệ.'},
+    ]},
+];
+
+const state = { active:'recon', mitigated:new Set(), view:'all' };
+const chainEl = document.getElementById('chain');
+const detailEl = document.getElementById('detail');
+
+function totalTechs(){return STAGES.reduce((n,s)=>n+s.techs.length,0)}
+function stageOpenCount(s){return s.techs.filter(t=>!state.mitigated.has(s.id+t.code)).length}
+
+function renderChain(){
+  chainEl.innerHTML='';
+  STAGES.forEach((s,i)=>{
+    const open = stageOpenCount(s);
+    const el=document.createElement('div');
+    el.className='stage'+(s.id===state.active?' active':'')+(open===0?' clear':'');
+    el.tabIndex=0;
+    el.setAttribute('role','button');
+    el.setAttribute('aria-pressed', s.id===state.active);
+    el.innerHTML=`<span class="dot"></span>
+      <span class="num">${String(i+1).padStart(2,'0')} · ${s.tid}</span>
+      <span class="tac">${s.tactic}</span>
+      <span class="cnt">${open?open+' kỹ thuật mở':'đã chặn'}</span>`;
+    el.onclick=()=>{state.active=s.id;render()};
+    el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();state.active=s.id;render()}};
+    chainEl.appendChild(el);
+  });
+}
+
+function renderDetail(){
+  const s=STAGES.find(x=>x.id===state.active);
+  let techs=s.techs;
+  if(state.view==='open') techs=techs.filter(t=>!state.mitigated.has(s.id+t.code));
+
+  if(techs.length===0){
+    detailEl.innerHTML=`<div class="empty"><b>Giai đoạn đã được chặn</b>
+      Mọi kỹ thuật trong "${s.tactic}" đã có biện pháp giảm thiểu. Chuyển bộ lọc về "Toàn chuỗi" để xem lại.</div>`;
+    return;
+  }
+  const rows=techs.map(t=>{
+    const key=s.id+t.code;
+    const mit=state.mitigated.has(key);
+    return `<div class="tech${mit?' mit':''}">
+      <span class="tcode">${t.code}</span>
+      <div class="tbody">
+        <div class="tname">${t.name}</div>
+        <div class="tdesc">${t.desc}</div>
+        <button class="toggle" data-key="${key}">${mit?'Khôi phục rủi ro':'Triển khai biện pháp'}</button>
+      </div></div>`;
+  }).join('');
+  detailEl.innerHTML=`
+    <div class="head">
+      <h2>${s.tactic}</h2><span class="tid">${s.tid}</span>
+      <p>${s.desc}</p>
+    </div>
+    <div class="techs">${rows}</div>`;
+
+  detailEl.querySelectorAll('.toggle').forEach(b=>{
+    b.onclick=()=>{
+      const k=b.dataset.key;
+      state.mitigated.has(k)?state.mitigated.delete(k):state.mitigated.add(k);
+      render();
+    };
+  });
+}
+
+function renderMeter(){
+  const exposure=Math.round((1 - state.mitigated.size/totalTechs())*100);
+  document.getElementById('barFill').style.width=exposure+'%';
+  document.getElementById('barPct').textContent=exposure+'%';
+}
+
+function render(){renderChain();renderDetail();renderMeter();}
+
+document.getElementById('viewSeg').querySelectorAll('button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#viewSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');state.view=b.dataset.view;render();
+  };
+});
+document.getElementById('resetBtn').onclick=()=>{state.mitigated.clear();state.view='all';
+  document.querySelectorAll('#viewSeg button').forEach((x,i)=>x.classList.toggle('on',i===0));
+  render();};
+
+render();
+</script>
+</body>
+</html>
